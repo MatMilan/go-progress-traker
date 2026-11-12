@@ -4,7 +4,6 @@
 const SUPABASE_URL = 'https://ppmdlfrqxqpaktrsgyoc.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_59ljxricx6beZsJ_szZFgg_YmiWdJgx';
 
-// Используем имя 'db', чтобы не конфликтовать с глобальной переменной библиотеки
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ============================================
@@ -12,12 +11,12 @@ const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 // ============================================
 let allProfiles = [];
 let allGoLevels = [];
-let statsMap = {};          // profileId -> current_stats
-let dailyMap = {};          // profileId -> { date: count }
-let levelMap = {};          // profileId -> { levelCode: solved }
-let trialsMap = {};         // profileId -> { levelCode: passed }
-let trialsPassedCount = {}; // profileId -> количество пройденных испытаний
-let allDates = [];          // список дат по убыванию
+let statsMap = {};
+let dailyMap = {};
+let levelMap = {};
+let trialsMap = {};
+let trialsPassedCount = {};
+let allDates = [];
 
 // ============================================
 // Состояние интерфейса
@@ -27,7 +26,6 @@ let selectedLevel = null;
 let sortState = { key: 'name', direction: 'asc' };
 let currentChart = null;
 
-// Конфигурация столбцов таблицы сравнения
 const COLUMNS = [
     { key: 'name',   label: 'Имя',                   type: 'string' },
     { key: 'elo',    label: 'Рейтинг',               type: 'number' },
@@ -44,9 +42,11 @@ const COLUMNS = [
 document.addEventListener('DOMContentLoaded', async () => {
     await loadGoLevels();
     await loadAllData();
-    populateSelectors();
-    renderComparisonHeader();
-    renderComparisonTable();
+
+    renderFilterRow();          // создаём селекты внутри таблицы
+    populateSelectors();        // заполняем их опциями
+    renderComparisonHeader();   // строка заголовков
+    renderComparisonTable();    // данные
 
     document.getElementById('back-btn').addEventListener('click', showComparisonView);
 });
@@ -74,7 +74,6 @@ async function loadAllData() {
     const loadingEl = document.getElementById('loading');
 
     try {
-        // Профили
         const { data: profiles, error: profilesError } = await db
             .from('profiles')
             .select('*')
@@ -91,7 +90,6 @@ async function loadAllData() {
         allProfiles = profiles;
         const ids = profiles.map(p => p.id);
 
-        // Текущая статистика
         const { data: stats } = await db
             .from('current_stats')
             .select('*')
@@ -100,7 +98,6 @@ async function loadAllData() {
         statsMap = {};
         (stats || []).forEach(s => { statsMap[s.profile_id] = s; });
 
-        // Активность по дням
         const { data: daily } = await db
             .from('daily_activity')
             .select('profile_id, activity_date, solved_count')
@@ -113,9 +110,8 @@ async function loadAllData() {
             dailyMap[d.profile_id][d.activity_date] = d.solved_count;
             dateSet.add(d.activity_date);
         });
-        allDates = Array.from(dateSet).sort().reverse(); // по убыванию
+        allDates = Array.from(dateSet).sort().reverse();
 
-        // Статистика по уровням
         const { data: levels } = await db
             .from('profile_level_stats')
             .select('profile_id, level_code, solved_count')
@@ -127,7 +123,6 @@ async function loadAllData() {
             levelMap[l.profile_id][l.level_code] = l.solved_count;
         });
 
-        // Испытания на время
         const { data: trials } = await db
             .from('profile_time_trials')
             .select('profile_id, level_code, passed')
@@ -152,10 +147,41 @@ async function loadAllData() {
 }
 
 // ============================================
+// Строка фильтров внутри таблицы
+// ============================================
+function renderFilterRow() {
+    const thead = document.getElementById('comparison-head');
+
+    const old = thead.querySelector('tr.filter-row');
+    if (old) old.remove();
+
+    const filterRow = document.createElement('tr');
+    filterRow.className = 'filter-row';
+
+    COLUMNS.forEach(col => {
+        const th = document.createElement('th');
+        th.className = 'filter-cell';
+
+        if (col.key === 'daily') {
+            const sel = document.createElement('select');
+            sel.id = 'date-select';
+            th.appendChild(sel);
+        } else if (col.key === 'level') {
+            const sel = document.createElement('select');
+            sel.id = 'level-select';
+            th.appendChild(sel);
+        }
+
+        filterRow.appendChild(th);
+    });
+
+    thead.appendChild(filterRow);
+}
+
+// ============================================
 // Заполнение выпадающих списков
 // ============================================
 function populateSelectors() {
-    // Список дат
     const dateSel = document.getElementById('date-select');
     dateSel.innerHTML = '';
     allDates.forEach(d => {
@@ -165,7 +191,7 @@ function populateSelectors() {
         dateSel.appendChild(opt);
     });
     if (allDates.length > 0) {
-        selectedDate = allDates[0]; // самая свежая дата
+        selectedDate = allDates[0];
         dateSel.value = selectedDate;
     }
     dateSel.addEventListener('change', e => {
@@ -173,7 +199,6 @@ function populateSelectors() {
         renderComparisonTable();
     });
 
-    // Список уровней
     const levelSel = document.getElementById('level-select');
     levelSel.innerHTML = '';
     allGoLevels.forEach(l => {
@@ -197,9 +222,15 @@ function populateSelectors() {
 // ============================================
 function renderComparisonHeader() {
     const thead = document.getElementById('comparison-head');
-    thead.innerHTML = '';
 
-    const tr = document.createElement('tr');
+    let headerRow = thead.querySelector('tr.header-row');
+    if (!headerRow) {
+        headerRow = document.createElement('tr');
+        headerRow.className = 'header-row';
+        thead.insertBefore(headerRow, thead.firstChild);
+    }
+    headerRow.innerHTML = '';
+
     COLUMNS.forEach(col => {
         const th = document.createElement('th');
         th.classList.add('sortable');
@@ -217,10 +248,8 @@ function renderComparisonHeader() {
         th.appendChild(ind);
 
         th.addEventListener('click', () => handleSort(col));
-        tr.appendChild(th);
+        headerRow.appendChild(th);
     });
-
-    thead.appendChild(tr);
 }
 
 function handleSort(col) {
@@ -238,8 +267,13 @@ function handleSort(col) {
 // Построение и отрисовка таблицы сравнения
 // ============================================
 function buildComparisonRows() {
+    const levelObj = allGoLevels.find(l => l.code === selectedLevel);
+    const levelTotal = levelObj ? (levelObj.total_problems || 0) : 0;
+
     return allProfiles.map(p => {
         const s = statsMap[p.id] || {};
+        const levelSolved = selectedLevel ? (levelMap[p.id]?.[selectedLevel] ?? 0) : 0;
+
         return {
             id: p.id,
             name: p.full_name || p.username,
@@ -247,7 +281,8 @@ function buildComparisonRows() {
             total: s.total_solves || 0,
             unique: s.unique_solves || 0,
             daily: selectedDate ? (dailyMap[p.id]?.[selectedDate] ?? 0) : 0,
-            level: selectedLevel ? (levelMap[p.id]?.[selectedLevel] ?? 0) : 0,
+            level: levelSolved,
+            levelPct: levelTotal > 0 ? Math.round((levelSolved / levelTotal) * 100) : null,
             trials: trialsPassedCount[p.id] || 0,
         };
     });
@@ -281,7 +316,7 @@ function renderComparisonTable() {
             <td>${r.total}</td>
             <td>${r.unique}</td>
             <td>${r.daily}</td>
-            <td>${r.level}</td>
+            <td>${r.level}${r.levelPct != null ? ` (${r.levelPct}%)` : ''}</td>
             <td>${r.trials}</td>
         `;
         tr.addEventListener('click', () => showUserDetails(r.id));
