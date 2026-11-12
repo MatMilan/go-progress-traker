@@ -5,9 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Go Progress Tracker</title>
     <link rel="stylesheet" href="style.css">
-    <!-- Supabase JS клиент -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <!-- Chart.js для графиков -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
@@ -21,20 +19,22 @@
         <section id="comparison-section">
             <h2>Сравнение пользователей</h2>
             <div id="loading">Загрузка данных...</div>
+
+            <!-- Панель фильтров -->
+            <div class="controls">
+                <div class="control-group">
+                    <label for="date-select">Решено за день — дата:</label>
+                    <select id="date-select"></select>
+                </div>
+                <div class="control-group">
+                    <label for="level-select">Решено по уровню — уровень:</label>
+                    <select id="level-select"></select>
+                </div>
+            </div>
+
             <table id="comparison-table">
-                <thead>
-                    <tr>
-                        <th>Имя</th>
-                        <th>Логин</th>
-                        <th>Рейтинг</th>
-                        <th>Всего решено</th>
-                        <th>Уникальных</th>
-                        <th>Испытаний пройдено</th>
-                    </tr>
-                </thead>
-                <tbody id="comparison-body">
-                    <!-- Данные будут добавлены через JavaScript -->
-                </tbody>
+                <thead id="comparison-head"></thead>
+                <tbody id="comparison-body"></tbody>
             </table>
         </section>
 
@@ -42,7 +42,7 @@
         <section id="user-detail-section" style="display: none;">
             <button id="back-btn">← Назад к списку</button>
             <h2 id="user-detail-name"></h2>
-            
+
             <div class="stats-cards">
                 <div class="card">
                     <div class="card-title">Рейтинг</div>
@@ -61,30 +61,13 @@
             <h3>Активность по дням</h3>
             <canvas id="activity-chart"></canvas>
 
-            <h3>Уровни</h3>
-            <table id="levels-table">
-                <thead>
-                    <tr>
-                        <th>Уровень</th>
-                        <th>Решено</th>
-                        <th>Всего задач</th>
-                        <th>Прогресс</th>
-                    </tr>
-                </thead>
-                <tbody id="levels-body"></tbody>
-            </table>
-
-            <h3>Испытания на время</h3>
-            <table id="trials-table">
-                <thead>
-                    <tr>
-                        <th>Уровень</th>
-                        <th>Статус</th>
-                        <th>Лучший счёт</th>
-                    </tr>
-                </thead>
-                <tbody id="trials-body"></tbody>
-            </table>
+            <h3>Уровни и испытания на время</h3>
+            <p class="chart-legend">
+                Высота столбца — процент решённых задач уровня.
+                Над столбцом — «решено / всего».
+                ☑ под осью — испытание на время пройдено.
+            </p>
+            <div id="level-chart"></div>
         </section>
     </main>
 
