@@ -7,7 +7,9 @@ const SUPABASE_ANON_KEY = 'sb_publishable_59ljxricx6beZsJ_szZFgg_YmiWdJgx';
 // ============================================
 // Инициализация
 // ============================================
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Используем имя 'db' вместо 'supabase', чтобы не конфликтовать
+// с глобальной переменной библиотеки
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // Глобальные переменные
 let allProfiles = [];
@@ -29,7 +31,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 // Загрузка справочника уровней
 // ============================================
 async function loadGoLevels() {
-    const { data, error } = await supabase
+    const { data, error } = await db
         .from('go_levels')
         .select('*')
         .order('sort_order');
@@ -51,7 +53,7 @@ async function loadComparisonTable() {
     
     try {
         // Загружаем профили
-        const { data: profiles, error: profilesError } = await supabase
+        const { data: profiles, error: profilesError } = await db
             .from('profiles')
             .select('*')
             .eq('is_active', true)
@@ -68,7 +70,7 @@ async function loadComparisonTable() {
         
         // Загружаем текущую статистику для всех профилей
         const profileIds = profiles.map(p => p.id);
-        const { data: stats, error: statsError } = await supabase
+        const { data: stats, error: statsError } = await db
             .from('current_stats')
             .select('*')
             .in('profile_id', profileIds);
@@ -76,7 +78,7 @@ async function loadComparisonTable() {
         if (statsError) throw statsError;
         
         // Загружаем испытания на время для всех профилей
-        const { data: trials, error: trialsError } = await supabase
+        const { data: trials, error: trialsError } = await db
             .from('profile_time_trials')
             .select('profile_id, passed')
             .in('profile_id', profileIds);
@@ -146,7 +148,7 @@ async function showUserDetails(profileId) {
     
     try {
         // Загружаем текущую статистику
-        const { data: currentStats } = await supabase
+        const { data: currentStats } = await db
             .from('current_stats')
             .select('*')
             .eq('profile_id', profileId)
@@ -179,7 +181,7 @@ async function showUserDetails(profileId) {
 // График активности по дням
 // ============================================
 async function loadActivityChart(profileId) {
-    const { data, error } = await supabase
+    const { data, error } = await db
         .from('daily_activity')
         .select('activity_date, solved_count')
         .eq('profile_id', profileId)
@@ -233,7 +235,7 @@ async function loadActivityChart(profileId) {
 // Таблица уровней
 // ============================================
 async function loadLevelsTable(profileId) {
-    const { data, error } = await supabase
+    const { data, error } = await db
         .from('profile_level_stats')
         .select('level_code, solved_count')
         .eq('profile_id', profileId);
@@ -278,7 +280,7 @@ async function loadLevelsTable(profileId) {
 // Таблица испытаний на время
 // ============================================
 async function loadTrialsTable(profileId) {
-    const { data, error } = await supabase
+    const { data, error } = await db
         .from('profile_time_trials')
         .select('level_code, passed, best_score')
         .eq('profile_id', profileId);
