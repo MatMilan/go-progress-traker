@@ -81,31 +81,22 @@ tr:hover {
     cursor: pointer;
 }
 
-/* Панель фильтров */
-.controls {
-    display: flex;
-    gap: 25px;
-    margin-bottom: 15px;
-    flex-wrap: wrap;
+/* ===== Строка фильтров внутри таблицы ===== */
+.filter-row th.filter-cell {
+    padding: 6px 8px;
+    background-color: #fdfdfd;
+    border-bottom: 2px solid #ddd;
+    font-weight: normal;
 }
 
-.control-group {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.control-group label {
-    font-size: 14px;
-    color: #555;
-}
-
-.control-group select {
-    padding: 6px 10px;
+.filter-row select {
+    width: 100%;
+    padding: 5px 8px;
     border-radius: 5px;
     border: 1px solid #ccc;
     background: white;
-    font-size: 14px;
+    font-size: 13px;
+    box-sizing: border-box;
 }
 
 /* Карточки статистики */
