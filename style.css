@@ -61,11 +61,54 @@ th {
     font-weight: 600;
 }
 
+/* Сортируемые заголовки */
+th.sortable {
+    cursor: pointer;
+    user-select: none;
+}
+
+th.sortable:hover {
+    background-color: #e9ecef;
+}
+
+.sort-ind {
+    font-size: 10px;
+    color: #3498db;
+}
+
 tr:hover {
     background-color: #f8f9fa;
     cursor: pointer;
 }
 
+/* Панель фильтров */
+.controls {
+    display: flex;
+    gap: 25px;
+    margin-bottom: 15px;
+    flex-wrap: wrap;
+}
+
+.control-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.control-group label {
+    font-size: 14px;
+    color: #555;
+}
+
+.control-group select {
+    padding: 6px 10px;
+    border-radius: 5px;
+    border: 1px solid #ccc;
+    background: white;
+    font-size: 14px;
+}
+
+/* Карточки статистики */
 .stats-cards {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -107,29 +150,6 @@ tr:hover {
     background: #2980b9;
 }
 
-.progress-bar {
-    background: #ecf0f1;
-    border-radius: 10px;
-    height: 20px;
-    overflow: hidden;
-}
-
-.progress-fill {
-    background: #2ecc71;
-    height: 100%;
-    border-radius: 10px;
-    transition: width 0.3s;
-}
-
-.passed {
-    color: #27ae60;
-    font-weight: bold;
-}
-
-.not-passed {
-    color: #e74c3c;
-}
-
 #loading {
     text-align: center;
     padding: 20px;
@@ -139,4 +159,69 @@ tr:hover {
 canvas {
     max-height: 300px;
     margin-bottom: 20px;
+}
+
+.chart-legend {
+    font-size: 13px;
+    color: #7f8c8d;
+    margin-bottom: 10px;
+}
+
+/* ===== Столбцовая диаграмма уровней ===== */
+#level-chart {
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    overflow-x: auto;
+    padding: 10px 5px 15px;
+    min-height: 280px;
+}
+
+.level-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 0 0 auto;
+    width: 30px;
+}
+
+.level-value {
+    font-size: 9px;
+    color: #555;
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+}
+
+.level-bar-area {
+    width: 100%;
+    height: 150px;
+    display: flex;
+    align-items: flex-end;
+    background: #f0f2f5;
+    border-radius: 3px;
+}
+
+.level-bar {
+    width: 100%;
+    background: #3498db;
+    border-radius: 3px 3px 0 0;
+    min-height: 1px;
+}
+
+.level-xlabel {
+    font-size: 9px;
+    margin-top: 5px;
+    color: #7f8c8d;
+    white-space: nowrap;
+}
+
+.trial-check {
+    margin-top: 4px;
+    cursor: default;
+    accent-color: #27ae60;
 }
