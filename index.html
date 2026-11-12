@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Go Progress Tracker</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Supabase JS клиент -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Chart.js для графиков -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <header>
+        <h1>📊 Go Progress Tracker</h1>
+        <p>Статистика решения задач на goproblems.com</p>
+    </header>
+
+    <main>
+        <!-- Секция сравнения всех пользователей -->
+        <section id="comparison-section">
+            <h2>Сравнение пользователей</h2>
+            <div id="loading">Загрузка данных...</div>
+            <table id="comparison-table">
+                <thead>
+                    <tr>
+                        <th>Имя</th>
+                        <th>Логин</th>
+                        <th>Рейтинг</th>
+                        <th>Всего решено</th>
+                        <th>Уникальных</th>
+                        <th>Испытаний пройдено</th>
+                    </tr>
+                </thead>
+                <tbody id="comparison-body">
+                    <!-- Данные будут добавлены через JavaScript -->
+                </tbody>
+            </table>
+        </section>
+
+        <!-- Секция детальной информации о пользователе -->
+        <section id="user-detail-section" style="display: none;">
+            <button id="back-btn">← Назад к списку</button>
+            <h2 id="user-detail-name"></h2>
+            
+            <div class="stats-cards">
+                <div class="card">
+                    <div class="card-title">Рейтинг</div>
+                    <div class="card-value" id="detail-elo">-</div>
+                </div>
+                <div class="card">
+                    <div class="card-title">Всего решено</div>
+                    <div class="card-value" id="detail-total">-</div>
+                </div>
+                <div class="card">
+                    <div class="card-title">Уникальных</div>
+                    <div class="card-value" id="detail-unique">-</div>
+                </div>
+            </div>
+
+            <h3>Активность по дням</h3>
+            <canvas id="activity-chart"></canvas>
+
+            <h3>Уровни</h3>
+            <table id="levels-table">
+                <thead>
+                    <tr>
+                        <th>Уровень</th>
+                        <th>Решено</th>
+                        <th>Всего задач</th>
+                        <th>Прогресс</th>
+                    </tr>
+                </thead>
+                <tbody id="levels-body"></tbody>
+            </table>
+
+            <h3>Испытания на время</h3>
+            <table id="trials-table">
+                <thead>
+                    <tr>
+                        <th>Уровень</th>
+                        <th>Статус</th>
+                        <th>Лучший счёт</th>
+                    </tr>
+                </thead>
+                <tbody id="trials-body"></tbody>
+            </table>
+        </section>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+</html>
