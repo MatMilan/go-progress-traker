@@ -4,26 +4,50 @@
 const SUPABASE_URL = 'https://ppmdlfrqxqpaktrsgyoc.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_59ljxricx6beZsJ_szZFgg_YmiWdJgx';
 
-// ============================================
-// Инициализация
-// ============================================
-// Используем имя 'db' вместо 'supabase', чтобы не конфликтовать
-// с глобальной переменной библиотеки
+// Используем имя 'db', чтобы не конфликтовать с глобальной переменной библиотеки
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// Глобальные переменные
+// ============================================
+// Данные
+// ============================================
 let allProfiles = [];
 let allGoLevels = [];
-let currentChart = null;
+let statsMap = {};          // profileId -> current_stats
+let dailyMap = {};          // profileId -> { date: count }
+let levelMap = {};          // profileId -> { levelCode: solved }
+let trialsMap = {};         // profileId -> { levelCode: passed }
+let trialsPassedCount = {}; // profileId -> количество пройденных испытаний
+let allDates = [];          // список дат по убыванию
 
 // ============================================
-// Загрузка данных при старте
+// Состояние интерфейса
+// ============================================
+let selectedDate = null;
+let selectedLevel = null;
+let sortState = { key: 'name', direction: 'asc' };
+let currentChart = null;
+
+// Конфигурация столбцов таблицы сравнения
+const COLUMNS = [
+    { key: 'name',   label: 'Имя',                   type: 'string' },
+    { key: 'elo',    label: 'Рейтинг',               type: 'number' },
+    { key: 'total',  label: 'Всего решено',          type: 'number' },
+    { key: 'unique', label: 'Уникальных',            type: 'number' },
+    { key: 'daily',  label: 'Решено за день',        type: 'number' },
+    { key: 'level',  label: 'Решено по уровню',      type: 'number' },
+    { key: 'trials', label: 'Испытаний пройдено',    type: 'number' },
+];
+
+// ============================================
+// Старт
 // ============================================
 document.addEventListener('DOMContentLoaded', async () => {
     await loadGoLevels();
-    await loadComparisonTable();
-    
-    // Обработчик кнопки "Назад"
+    await loadAllData();
+    populateSelectors();
+    renderComparisonHeader();
+    renderComparisonTable();
+
     document.getElementById('back-btn').addEventListener('click', showComparisonView);
 });
 
@@ -35,96 +59,92 @@ async function loadGoLevels() {
         .from('go_levels')
         .select('*')
         .order('sort_order');
-    
+
     if (error) {
         console.error('Ошибка загрузки уровней:', error);
         return;
     }
-    
     allGoLevels = data || [];
 }
 
 // ============================================
-// Загрузка таблицы сравнения
+// Загрузка всех данных для таблицы сравнения
 // ============================================
-async function loadComparisonTable() {
+async function loadAllData() {
     const loadingEl = document.getElementById('loading');
-    const tbody = document.getElementById('comparison-body');
-    
+
     try {
-        // Загружаем профили
+        // Профили
         const { data: profiles, error: profilesError } = await db
             .from('profiles')
             .select('*')
             .eq('is_active', true)
             .order('username');
-        
+
         if (profilesError) throw profilesError;
-        
+
         if (!profiles || profiles.length === 0) {
             loadingEl.textContent = 'Нет пользователей для отображения';
             return;
         }
-        
+
         allProfiles = profiles;
-        
-        // Загружаем текущую статистику для всех профилей
-        const profileIds = profiles.map(p => p.id);
-        const { data: stats, error: statsError } = await db
+        const ids = profiles.map(p => p.id);
+
+        // Текущая статистика
+        const { data: stats } = await db
             .from('current_stats')
             .select('*')
-            .in('profile_id', profileIds);
-        
-        if (statsError) throw statsError;
-        
-        // Загружаем испытания на время для всех профилей
-        const { data: trials, error: trialsError } = await db
+            .in('profile_id', ids);
+
+        statsMap = {};
+        (stats || []).forEach(s => { statsMap[s.profile_id] = s; });
+
+        // Активность по дням
+        const { data: daily } = await db
+            .from('daily_activity')
+            .select('profile_id, activity_date, solved_count')
+            .in('profile_id', ids);
+
+        dailyMap = {};
+        const dateSet = new Set();
+        (daily || []).forEach(d => {
+            if (!dailyMap[d.profile_id]) dailyMap[d.profile_id] = {};
+            dailyMap[d.profile_id][d.activity_date] = d.solved_count;
+            dateSet.add(d.activity_date);
+        });
+        allDates = Array.from(dateSet).sort().reverse(); // по убыванию
+
+        // Статистика по уровням
+        const { data: levels } = await db
+            .from('profile_level_stats')
+            .select('profile_id, level_code, solved_count')
+            .in('profile_id', ids);
+
+        levelMap = {};
+        (levels || []).forEach(l => {
+            if (!levelMap[l.profile_id]) levelMap[l.profile_id] = {};
+            levelMap[l.profile_id][l.level_code] = l.solved_count;
+        });
+
+        // Испытания на время
+        const { data: trials } = await db
             .from('profile_time_trials')
-            .select('profile_id, passed')
-            .in('profile_id', profileIds);
-        
-        if (trialsError) throw trialsError;
-        
-        // Строим карту статистики по profile_id
-        const statsMap = {};
-        (stats || []).forEach(s => {
-            statsMap[s.profile_id] = s;
-        });
-        
-        // Строим карту испытаний: сколько пройдено у каждого профиля
-        const trialsMap = {};
+            .select('profile_id, level_code, passed')
+            .in('profile_id', ids);
+
+        trialsMap = {};
+        trialsPassedCount = {};
         (trials || []).forEach(t => {
-            if (!trialsMap[t.profile_id]) {
-                trialsMap[t.profile_id] = 0;
-            }
-            if (t.passed) {
-                trialsMap[t.profile_id]++;
-            }
+            if (!trialsMap[t.profile_id]) trialsMap[t.profile_id] = {};
+            trialsMap[t.profile_id][t.level_code] = t.passed;
+
+            if (!trialsPassedCount[t.profile_id]) trialsPassedCount[t.profile_id] = 0;
+            if (t.passed) trialsPassedCount[t.profile_id]++;
         });
-        
-        // Заполняем таблицу
-        tbody.innerHTML = '';
-        profiles.forEach(profile => {
-            const stat = statsMap[profile.id] || {};
-            const trialsPassed = trialsMap[profile.id] || 0;
-            
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td>${profile.full_name || profile.username}</td>
-                <td>${profile.username}</td>
-                <td>${stat.current_elo ? Math.round(stat.current_elo) : '-'}</td>
-                <td>${stat.total_solves || 0}</td>
-                <td>${stat.unique_solves || 0}</td>
-                <td>${trialsPassed}</td>
-            `;
-            
-            // Клик по строке открывает детали
-            row.addEventListener('click', () => showUserDetails(profile.id));
-            tbody.appendChild(row);
-        });
-        
+
         loadingEl.style.display = 'none';
-        
+
     } catch (error) {
         console.error('Ошибка загрузки данных:', error);
         loadingEl.textContent = 'Ошибка загрузки данных. Проверьте подключение к Supabase.';
@@ -132,53 +152,168 @@ async function loadComparisonTable() {
 }
 
 // ============================================
-// Показ детальной информации о пользователе
+// Заполнение выпадающих списков
+// ============================================
+function populateSelectors() {
+    // Список дат
+    const dateSel = document.getElementById('date-select');
+    dateSel.innerHTML = '';
+    allDates.forEach(d => {
+        const opt = document.createElement('option');
+        opt.value = d;
+        opt.textContent = formatDate(d);
+        dateSel.appendChild(opt);
+    });
+    if (allDates.length > 0) {
+        selectedDate = allDates[0]; // самая свежая дата
+        dateSel.value = selectedDate;
+    }
+    dateSel.addEventListener('change', e => {
+        selectedDate = e.target.value;
+        renderComparisonTable();
+    });
+
+    // Список уровней
+    const levelSel = document.getElementById('level-select');
+    levelSel.innerHTML = '';
+    allGoLevels.forEach(l => {
+        const opt = document.createElement('option');
+        opt.value = l.code;
+        opt.textContent = l.label;
+        levelSel.appendChild(opt);
+    });
+    if (allGoLevels.length > 0) {
+        selectedLevel = allGoLevels[0].code;
+        levelSel.value = selectedLevel;
+    }
+    levelSel.addEventListener('change', e => {
+        selectedLevel = e.target.value;
+        renderComparisonTable();
+    });
+}
+
+// ============================================
+// Заголовок таблицы с сортировкой
+// ============================================
+function renderComparisonHeader() {
+    const thead = document.getElementById('comparison-head');
+    thead.innerHTML = '';
+
+    const tr = document.createElement('tr');
+    COLUMNS.forEach(col => {
+        const th = document.createElement('th');
+        th.classList.add('sortable');
+        th.dataset.key = col.key;
+
+        const labelSpan = document.createElement('span');
+        labelSpan.textContent = col.label;
+        th.appendChild(labelSpan);
+
+        const ind = document.createElement('span');
+        ind.className = 'sort-ind';
+        if (sortState.key === col.key) {
+            ind.textContent = sortState.direction === 'asc' ? ' ▲' : ' ▼';
+        }
+        th.appendChild(ind);
+
+        th.addEventListener('click', () => handleSort(col));
+        tr.appendChild(th);
+    });
+
+    thead.appendChild(tr);
+}
+
+function handleSort(col) {
+    if (sortState.key === col.key) {
+        sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
+    } else {
+        sortState.key = col.key;
+        sortState.direction = col.type === 'string' ? 'asc' : 'desc';
+    }
+    renderComparisonHeader();
+    renderComparisonTable();
+}
+
+// ============================================
+// Построение и отрисовка таблицы сравнения
+// ============================================
+function buildComparisonRows() {
+    return allProfiles.map(p => {
+        const s = statsMap[p.id] || {};
+        return {
+            id: p.id,
+            name: p.full_name || p.username,
+            elo: s.current_elo != null ? Math.round(s.current_elo) : null,
+            total: s.total_solves || 0,
+            unique: s.unique_solves || 0,
+            daily: selectedDate ? (dailyMap[p.id]?.[selectedDate] ?? 0) : 0,
+            level: selectedLevel ? (levelMap[p.id]?.[selectedLevel] ?? 0) : 0,
+            trials: trialsPassedCount[p.id] || 0,
+        };
+    });
+}
+
+function renderComparisonTable() {
+    const tbody = document.getElementById('comparison-body');
+    let rows = buildComparisonRows();
+
+    const { key, direction } = sortState;
+    const mult = direction === 'asc' ? 1 : -1;
+
+    rows.sort((a, b) => {
+        let av = a[key];
+        let bv = b[key];
+        if (av == null) av = -Infinity;
+        if (bv == null) bv = -Infinity;
+
+        if (typeof av === 'string' || typeof bv === 'string') {
+            return mult * String(av).localeCompare(String(bv), 'ru');
+        }
+        return mult * ((av > bv) - (av < bv));
+    });
+
+    tbody.innerHTML = '';
+    rows.forEach(r => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${escapeHtml(r.name)}</td>
+            <td>${r.elo != null ? r.elo : '-'}</td>
+            <td>${r.total}</td>
+            <td>${r.unique}</td>
+            <td>${r.daily}</td>
+            <td>${r.level}</td>
+            <td>${r.trials}</td>
+        `;
+        tr.addEventListener('click', () => showUserDetails(r.id));
+        tbody.appendChild(tr);
+    });
+}
+
+// ============================================
+// Детальная страница пользователя
 // ============================================
 async function showUserDetails(profileId) {
     const profile = allProfiles.find(p => p.id === profileId);
     if (!profile) return;
-    
-    // Переключаем видимость секций
+
     document.getElementById('comparison-section').style.display = 'none';
     document.getElementById('user-detail-section').style.display = 'block';
-    
-    // Устанавливаем имя
-    document.getElementById('user-detail-name').textContent = 
+
+    document.getElementById('user-detail-name').textContent =
         profile.full_name || profile.username;
-    
-    try {
-        // Загружаем текущую статистику
-        const { data: currentStats } = await db
-            .from('current_stats')
-            .select('*')
-            .eq('profile_id', profileId)
-            .single();
-        
-        if (currentStats) {
-            document.getElementById('detail-elo').textContent = 
-                currentStats.current_elo ? Math.round(currentStats.current_elo) : '-';
-            document.getElementById('detail-total').textContent = 
-                currentStats.total_solves || 0;
-            document.getElementById('detail-unique').textContent = 
-                currentStats.unique_solves || 0;
-        }
-        
-        // Загружаем активность по дням
-        await loadActivityChart(profileId);
-        
-        // Загружаем уровни
-        await loadLevelsTable(profileId);
-        
-        // Загружаем испытания
-        await loadTrialsTable(profileId);
-        
-    } catch (error) {
-        console.error('Ошибка загрузки деталей:', error);
-    }
+
+    const s = statsMap[profileId] || {};
+    document.getElementById('detail-elo').textContent =
+        s.current_elo != null ? Math.round(s.current_elo) : '-';
+    document.getElementById('detail-total').textContent = s.total_solves || 0;
+    document.getElementById('detail-unique').textContent = s.unique_solves || 0;
+
+    await loadActivityChart(profileId);
+    renderLevelChart(profileId);
 }
 
 // ============================================
-// График активности по дням
+// График активности по дням (линейный)
 // ============================================
 async function loadActivityChart(profileId) {
     const { data, error } = await db
@@ -186,22 +321,21 @@ async function loadActivityChart(profileId) {
         .select('activity_date, solved_count')
         .eq('profile_id', profileId)
         .order('activity_date');
-    
+
     if (error) {
         console.error('Ошибка загрузки активности:', error);
         return;
     }
-    
+
     const ctx = document.getElementById('activity-chart').getContext('2d');
-    
-    // Уничтожаем предыдущий график, если он был
+
     if (currentChart) {
         currentChart.destroy();
     }
-    
-    const labels = (data || []).map(d => d.activity_date);
+
+    const labels = (data || []).map(d => formatDate(d.activity_date));
     const counts = (data || []).map(d => d.solved_count);
-    
+
     currentChart = new Chart(ctx, {
         type: 'line',
         data: {
@@ -217,104 +351,37 @@ async function loadActivityChart(profileId) {
         },
         options: {
             responsive: true,
-            plugins: {
-                legend: {
-                    display: false
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true
-                }
-            }
+            plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true } }
         }
     });
 }
 
 // ============================================
-// Таблица уровней
+// Столбцовая диаграмма уровней + испытания
 // ============================================
-async function loadLevelsTable(profileId) {
-    const { data, error } = await db
-        .from('profile_level_stats')
-        .select('level_code, solved_count')
-        .eq('profile_id', profileId);
-    
-    if (error) {
-        console.error('Ошибка загрузки уровней:', error);
-        return;
-    }
-    
-    const tbody = document.getElementById('levels-body');
-    tbody.innerHTML = '';
-    
-    // Строим карту данных пользователя по уровням
-    const userLevelsMap = {};
-    (data || []).forEach(item => {
-        userLevelsMap[item.level_code] = item.solved_count;
-    });
-    
-    // Проходим по всем уровням из справочника
-    allGoLevels.forEach(level => {
-        const solved = userLevelsMap[level.code] || 0;
-        const total = level.total_problems || 0;
-        const progress = total > 0 ? Math.round((solved / total) * 100) : 0;
-        
-        const row = document.createElement('tr');
-        row.innerHTML = `
-            <td>${level.label}</td>
-            <td>${solved}</td>
-            <td>${total}</td>
-            <td>
-                <div class="progress-bar">
-                    <div class="progress-fill" style="width: ${progress}%"></div>
-                </div>
-                ${progress}%
-            </td>
-        `;
-        tbody.appendChild(row);
-    });
-}
+function renderLevelChart(profileId) {
+    const container = document.getElementById('level-chart');
+    container.innerHTML = '';
 
-// ============================================
-// Таблица испытаний на время
-// ============================================
-async function loadTrialsTable(profileId) {
-    const { data, error } = await db
-        .from('profile_time_trials')
-        .select('level_code, passed, best_score')
-        .eq('profile_id', profileId);
-    
-    if (error) {
-        console.error('Ошибка загрузки испытаний:', error);
-        return;
-    }
-    
-    const tbody = document.getElementById('trials-body');
-    tbody.innerHTML = '';
-    
-    // Строим карту испытаний пользователя
-    const userTrialsMap = {};
-    (data || []).forEach(item => {
-        userTrialsMap[item.level_code] = item;
-    });
-    
-    // Проходим по всем уровням из справочника
     allGoLevels.forEach(level => {
-        const trial = userTrialsMap[level.code];
-        const passed = trial ? trial.passed : false;
-        const bestScore = trial ? trial.best_score : null;
-        
-        const statusClass = passed ? 'passed' : 'not-passed';
-        const statusText = passed ? '✅ Пройден' : '❌ Не пройден';
-        
-        const row = document.createElement('tr');
-        row.innerHTML = `
-            <td>${level.label}</td>
-            <td class="${statusClass}">${statusText}</td>
-            <td>${bestScore !== null ? bestScore : '-'}</td>
+        const solved = levelMap[profileId]?.[level.code] ?? 0;
+        const total = level.total_problems ?? 0;
+        const pct = total > 0 ? Math.round((solved / total) * 100) : 0;
+        const passed = trialsMap[profileId]?.[level.code] ?? false;
+
+        const col = document.createElement('div');
+        col.className = 'level-col';
+        col.innerHTML = `
+            <div class="level-value" title="${level.label}: ${solved} из ${total} (${pct}%)">${solved}/${total}</div>
+            <div class="level-bar-area">
+                <div class="level-bar" style="height:${pct}%"></div>
+            </div>
+            <div class="level-xlabel" title="${level.label}">${level.code}</div>
+            <input type="checkbox" class="trial-check" ${passed ? 'checked' : ''} disabled
+                   title="${passed ? 'Испытание на время пройдено' : 'Испытание на время не пройдено'}">
         `;
-        tbody.appendChild(row);
+        container.appendChild(col);
     });
 }
 
@@ -324,10 +391,27 @@ async function loadTrialsTable(profileId) {
 function showComparisonView() {
     document.getElementById('comparison-section').style.display = 'block';
     document.getElementById('user-detail-section').style.display = 'none';
-    
-    // Уничтожаем график, чтобы не было утечек памяти
+
     if (currentChart) {
         currentChart.destroy();
         currentChart = null;
     }
+}
+
+// ============================================
+// Вспомогательные функции
+// ============================================
+function formatDate(iso) {
+    const [y, m, d] = iso.split('-');
+    return `${d}.${m}.${y}`;
+}
+
+function escapeHtml(str) {
+    if (str == null) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
 }
