@@ -216,3 +216,11 @@ canvas {
     cursor: default;
     accent-color: #27ae60;
 }
+/* ===== График активности за две недели ===== */
+.two-weeks-chart-container {
+    position: relative;
+    height: 420px;
+    width: 100%;
+    margin-top: 15px;
+    padding: 10px 0;
+}
