@@ -24,7 +24,8 @@ let allDates = [];
 let selectedDate = null;
 let selectedLevel = null;
 let sortState = { key: 'name', direction: 'asc' };
-let currentChart = null;
+let currentChart = null;        // график на странице деталей пользователя
+let twoWeeksChart = null;       // график активности за 2 недели на странице сравнения
 
 const COLUMNS = [
     { key: 'name',   label: 'Имя',                   type: 'string' },
@@ -47,6 +48,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     populateSelectors();        // заполняем их опциями
     renderComparisonHeader();   // строка заголовков
     renderComparisonTable();    // данные
+    renderTwoWeeksChart();      // двухнедельная активность
 
     document.getElementById('back-btn').addEventListener('click', showComparisonView);
 });
@@ -432,7 +434,100 @@ function showComparisonView() {
         currentChart = null;
     }
 }
+// ============================================
+// График активности за последние 2 недели
+// ============================================
+function renderTwoWeeksChart() {
+    const canvas = document.getElementById('two-weeks-chart');
+    if (!canvas) return;
 
+    // Берём последние 14 дат из allDates (он отсортирован по убыванию)
+    // и разворачиваем в хронологический порядок (слева направо)
+    const lastDates = allDates.slice(0, 14).reverse();
+
+    if (lastDates.length === 0) return;
+
+    const ctx = canvas.getContext('2d');
+
+    // Уничтожаем старый график, если он был
+    if (twoWeeksChart) {
+        twoWeeksChart.destroy();
+    }
+
+    // Палитра цветов для кривых
+    const colors = [
+        '#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6',
+        '#1abc9c', '#e67e22', '#34495e', '#16a085', '#c0392b',
+        '#8e44ad', '#2980b9', '#27ae60', '#d35400', '#7f8c8d',
+        '#2c3e50', '#f1c40f', '#95a5a6', '#d68910', '#1f618d'
+    ];
+
+    // Строим по одному датасету на каждого пользователя
+    const datasets = allProfiles.map((profile, index) => {
+        const color = colors[index % colors.length];
+        const data = lastDates.map(date => dailyMap[profile.id]?.[date] ?? 0);
+
+        return {
+            label: profile.full_name || profile.username,
+            data: data,
+            borderColor: color,
+            backgroundColor: color,
+            tension: 0.3,
+            fill: false,
+            pointRadius: 3,
+            pointHoverRadius: 6,
+            borderWidth: 2,
+        };
+    });
+
+    twoWeeksChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: lastDates.map(d => formatDate(d)),
+            datasets: datasets,
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                // Интерактивная легенда: клик скрывает/показывает кривую
+                legend: {
+                    display: true,
+                    position: 'top',
+                    labels: {
+                        usePointStyle: true,
+                        padding: 18,
+                        font: { size: 13 },
+                    },
+                },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                },
+            },
+            interaction: {
+                mode: 'nearest',
+                axis: 'x',
+                intersect: false,
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Решено задач',
+                    },
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Дата',
+                    },
+                },
+            },
+        },
+    });
+}
 // ============================================
 // Вспомогательные функции
 // ============================================
